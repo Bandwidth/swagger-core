@@ -321,6 +321,12 @@ public @interface Schema {
      */
     Extension[] extensions() default {};
 
+    /**
+     * Overrides the xml
+     * @return
+     */
+    XML xml() default @XML();
+
     enum AccessMode {
         AUTO,
         READ_ONLY,

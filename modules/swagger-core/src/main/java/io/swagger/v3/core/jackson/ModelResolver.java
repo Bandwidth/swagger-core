@@ -228,6 +228,10 @@ public class ModelResolver extends AbstractModelConverter implements ModelConver
                         innerSchema = new Schema().$ref(StringUtils.isNotEmpty(innerSchema.get$ref()) ? innerSchema.get$ref() : innerSchema.getName());
                     }
                 }
+
+                resloveXmlOverride(innerSchema, resolvedArrayAnnotation.schema());
+                resloveXmlOverride(schema, resolvedArrayAnnotation.arraySchema());
+
                 schema.setItems(innerSchema);
                 return schema;
             } else {
@@ -379,16 +383,16 @@ public class ModelResolver extends AbstractModelConverter implements ModelConver
                     context.resolve(new AnnotatedType().type(valueType).jsonViewAnnotation(annotatedType.getJsonViewAnnotation()));
                     return null;
                 }
-                Schema addPropertiesSchema = context.resolve(
+                Schema addPropertiesSchema = this.resolve(
                         new AnnotatedType()
-                                .type(valueType)
-                                .schemaProperty(annotatedType.isSchemaProperty())
-                                .ctxAnnotations(schemaAnnotations)
-                                .skipSchemaName(true)
-                                .resolveAsRef(annotatedType.isResolveAsRef())
-                                .jsonViewAnnotation(annotatedType.getJsonViewAnnotation())
-                                .propertyName(annotatedType.getPropertyName())
-                                .parent(annotatedType.getParent()));
+                        .type(valueType)
+                        .schemaProperty(annotatedType.isSchemaProperty())
+                        .ctxAnnotations(schemaAnnotations) //JLC maybe here
+                        .skipSchemaName(true)
+                        .resolveAsRef(annotatedType.isResolveAsRef())
+                        .jsonViewAnnotation(annotatedType.getJsonViewAnnotation())
+                        .propertyName(annotatedType.getPropertyName())
+                        .parent(annotatedType.getParent()), context,  next );
                 if (addPropertiesSchema != null) {
                     if (StringUtils.isNotBlank(addPropertiesSchema.getName())) {
                         pName = addPropertiesSchema.getName();
@@ -625,7 +629,9 @@ public class ModelResolver extends AbstractModelConverter implements ModelConver
                 final AnnotatedMember propMember = member;
                 aType.jsonUnwrappedHandler((t) -> {
                     JsonUnwrapped uw = propMember.getAnnotation(JsonUnwrapped.class);
-                    if (uw != null && uw.enabled()) {
+                    if (uw != null && uw.enabled() &&
+                            !propMember.hasAnnotation(io.swagger.v3.oas.annotations.media.ArraySchema.class) &&
+                            !propMember.hasAnnotation(io.swagger.v3.oas.annotations.media.Schema.class)) {
                         t
                             .ctxAnnotations(null)
                             .jsonUnwrappedHandler(null)
@@ -694,6 +700,10 @@ public class ModelResolver extends AbstractModelConverter implements ModelConver
                     property.setName(propName);
                     JAXBAnnotationsHelper.apply(propBeanDesc.getClassInfo(), annotations, property);
                     applyBeanValidatorAnnotations(property, annotations, model);
+
+                    if(member.hasAnnotation(io.swagger.v3.oas.annotations.media.Schema.class)) {
+                        resloveXmlOverride(property, member.getAnnotation(io.swagger.v3.oas.annotations.media.Schema.class));
+                    }
 
                     props.add(property);
                 }
@@ -862,6 +872,10 @@ public class ModelResolver extends AbstractModelConverter implements ModelConver
 
         resolveDiscriminatorProperty(type, context, model);
 
+        if( beanDesc.getClassAnnotations() != null && beanDesc.getClassAnnotations().has(io.swagger.v3.oas.annotations.media.Schema.class) ){
+            resloveXmlOverride(model, beanDesc.getClassAnnotations().get(io.swagger.v3.oas.annotations.media.Schema.class));
+        }
+
         return model;
     }
 
@@ -912,14 +926,16 @@ public class ModelResolver extends AbstractModelConverter implements ModelConver
         if (propertiesToIgnore.contains(propName)) {
             return true;
         }
-        if (member.hasAnnotation(JsonIgnore.class)) {
+        if (member.hasAnnotation(JsonIgnore.class) && !member.hasAnnotation(io.swagger.v3.oas.annotations.media.ArraySchema.class) && !member.hasAnnotation(io.swagger.v3.oas.annotations.media.Schema.class)) {
             return true;
         }
         if (xmlAccessorTypeAnnotation == null) {
             return false;
         }
         if (xmlAccessorTypeAnnotation.value().equals(XmlAccessType.NONE)) {
-            if (!member.hasAnnotation(XmlElement.class) &&
+            if (    !member.hasAnnotation(io.swagger.v3.oas.annotations.media.ArraySchema.class) &&
+                    !member.hasAnnotation(io.swagger.v3.oas.annotations.media.Schema.class) &&
+                    !member.hasAnnotation(XmlElement.class) &&
                     !member.hasAnnotation(XmlAttribute.class) &&
                     !member.hasAnnotation(XmlElementRef.class) &&
                     !member.hasAnnotation(XmlElementRefs.class) &&
@@ -2000,5 +2016,21 @@ public class ModelResolver extends AbstractModelConverter implements ModelConver
                 resolveSchemaMembers(schema, null, null, resolvedArrayAnnotation.arraySchema());
             }
         }
+    }
+
+    protected void resloveXmlOverride( Schema schema, io.swagger.v3.oas.annotations.media.Schema schemaAnno ){
+
+        if(schema == null || schemaAnno == null) return;
+
+        io.swagger.v3.oas.annotations.media.XML xmlAnno = schemaAnno.xml();
+
+        if( StringUtils.isEmpty(xmlAnno.name()) && !xmlAnno.wrapped() ) return;
+
+        XML xml = new XML();
+
+        xml.setName( StringUtils.isEmpty(xmlAnno.name()) ? null : xmlAnno.name() );
+        xml.setWrapped( xmlAnno.wrapped() ? true : null );
+
+        schema.setXml(xml);
     }
 }
