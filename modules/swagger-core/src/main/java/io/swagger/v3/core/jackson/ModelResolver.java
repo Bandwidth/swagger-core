@@ -703,6 +703,8 @@ public class ModelResolver extends AbstractModelConverter implements ModelConver
 
                     if(member.hasAnnotation(io.swagger.v3.oas.annotations.media.Schema.class)) {
                         resloveXmlOverride(property, member.getAnnotation(io.swagger.v3.oas.annotations.media.Schema.class));
+                    } else if (member.hasAnnotation(io.swagger.v3.oas.annotations.media.ArraySchema.class) && property instanceof ArraySchema) {
+                        resloveXmlOverride( (ArraySchema)property , member.getAnnotation(io.swagger.v3.oas.annotations.media.ArraySchema.class));
                     }
 
                     props.add(property);
@@ -2032,5 +2034,13 @@ public class ModelResolver extends AbstractModelConverter implements ModelConver
         xml.setWrapped( xmlAnno.wrapped() ? true : null );
 
         schema.setXml(xml);
+    }
+
+    protected void resloveXmlOverride( ArraySchema schema, io.swagger.v3.oas.annotations.media.ArraySchema schemaAnno ){
+
+        if(schema == null || schemaAnno == null) return;
+
+        resloveXmlOverride(schema, schemaAnno.arraySchema());
+        resloveXmlOverride(schema.getItems(), schemaAnno.schema());
     }
 }
